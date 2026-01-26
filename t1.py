@@ -7,7 +7,7 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Ваш токен от BotFather
-TOKEN = '8058652594:AAHF2FI4zm9T9dvmR4Z2CQ-mbfVRkdHpVSs'
+TOKEN = '8058652594:AAEe1D7VYaOxxjlfM56JQ69vXIFFmW51P2c'
 
 
 # ID чата, куда отправлять логи (группа/канал)
