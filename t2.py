@@ -3,21 +3,68 @@ from datetime import date, time, datetime
 import os
 import logging
 import sqlite3
+import sys
 
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('bot.log', encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 
-# Ваш токен от BotFather
-TOKEN = '8058652594:AAHF2FI4zm9T9dvmR4Z2CQ-mbfVRkdHpVSs'
+# Ваш токен от BotFather - ПРОВЕРЬТЕ ЕГО ПРАВИЛЬНОСТЬ!
+TOKEN = '8058652594:AAEe1D7VYaOxxjlfM56JQ69vXIFFmW51P2c'
 
 # ID чата, куда отправлять логи (группа/канал)
 LOG_CHAT_ID = -1003601117936  # замените на свой ID
 
-# Инициализация бота
-bot = telebot.TeleBot(TOKEN)
+def check_token_validity(token):
+    """Проверяет валидность токена"""
+    if not token or token.strip() == '':
+        return False, "Токен пустой"
+    
+    # Проверяем формат токена Telegram Bot API
+    if not token.startswith('') or len(token) < 30:
+        return False, "Неверный формат токена"
+    
+    return True, "Токен имеет правильный формат"
+
+# Проверяем токен перед запуском
+is_valid, message = check_token_validity(TOKEN)
+if not is_valid:
+    logging.error(f"Ошибка валидации токена: {message}")
+    print(f"❌ ОШИБКА: {message}")
+    print("Пожалуйста, получите новый токен у @BotFather и обновите его в коде.")
+    sys.exit(1)
+
+logging.info("Токен прошел базовую проверку формата")
+
+try:
+    # Инициализация бота
+    bot = telebot.TeleBot(TOKEN)
+    
+    # Пробуем получить информацию о боте для проверки токена
+    bot_info = bot.get_me()
+    logging.info(f"✅ Бот успешно подключен: @{bot_info.username} (ID: {bot_info.id})")
+    print(f"✅ Бот успешно подключен: @{bot_info.username}")
+    
+except Exception as e:
+    logging.error(f"❌ Ошибка при подключении бота: {e}")
+    print(f"❌ Ошибка при подключении бота: {e}")
+    print("\nВозможные причины:")
+    print("1. Токен неверный или устарел")
+    print("2. Нет подключения к интернету")
+    print("3. Проблемы с API Telegram")
+    print("\nПолучите новый токен у @BotFather:")
+    print("1. Откройте Telegram")
+    print("2. Найдите @BotFather")
+    print("3. Отправьте /newbot")
+    print("4. Следуйте инструкциям")
+    print("5. Скопируйте новый токен и замените его в коде")
+    sys.exit(1)
 
 # 1. Полное расписание на день (0=понедельник, ..., 6=воскресенье)
 WEEK_INFO = {
@@ -127,11 +174,9 @@ def get_weekday() -> int:
     """Возвращает номер дня недели: 0=понедельник, 6=воскресенье."""
     return date.today().weekday()
 
-
 def get_isoweekday() -> int:
     """Возвращает номер дня недели: 1=понедельник, 7=воскресенье."""
     return date.today().isoweekday()
-
 
 # Создание БД для хранения ID групп
 conn = sqlite3.connect('bot_groups.db', check_same_thread=False)
@@ -153,137 +198,183 @@ def track_group(message):
         except Exception as e:
             logging.error(f"Ошибка при сохранении группы: {e}")
 
-
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    track_group(message)  # Отслеживаем группу
-    bot.reply_to(message, (
-        "Привет! Я бот расписания и отправки сообщений.\n"
-        "Команды:\n"
-        "/today — расписание на сегодня\n"
-        "/что сейчас — что идёт прямо сейчас\n"
-        "/понедельник … /воскресенье — расписание на конкретный день\n"
-        "/msg <текст> <id_пользователя> — отправить сообщение пользователю\n"
-        "/gmsg <текст> <id_группы> — отправить сообщение в группу\n"
-        "/groups — показать все группы, где я состою\n"
-        "/members <id_группы> — список участников группы (если я админ)"
-    ))
-    send_log_to_chat(message, "start", "Отправлено приветственное сообщение")
+    try:
+        track_group(message)  # Отслеживаем группу
+        bot.reply_to(message, (
+            "Привет! Я бот расписания и отправки сообщений.\n"
+            "Команды:\n"
+            "/today — расписание на сегодня\n"
+            "/что сейчас — что идёт прямо сейчас\n"
+            "/понедельник … /воскресенье — расписание на конкретный день\n"
+            "/msg <текст> <id_пользователя> — отправить сообщение пользователю\n"
+            "/gmsg <текст> <id_группы> — отправить сообщение в группу\n"
+            "/groups — показать все группы, где я состою\n"
+            "/members <id_группы> — список участников группы (если я админ)\n"
+            "/status — статус бота"
+        ))
+        send_log_to_chat(message, "start", "Отправлено приветственное сообщение")
+    except Exception as e:
+        logging.error(f"Ошибка в команде /start: {e}")
+        bot.reply_to(message, "Произошла ошибка при обработке команды")
+
+@bot.message_handler(commands=['status'])
+def send_status(message):
+    """Показывает статус бота"""
+    try:
+        status_msg = f"✅ Бот работает\n"
+        status_msg += f"👤 Имя: @{bot.get_me().username}\n"
+        status_msg += f"🆔 ID: {bot.get_me().id}\n"
+        status_msg += f"📅 Дата: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        bot.reply_to(message, status_msg)
+    except Exception as e:
+        logging.error(f"Ошибка в команде /status: {e}")
+        bot.reply_to(message, f"❌ Ошибка при получении статуса: {e}")
 
 @bot.message_handler(commands=['today'])
 def send_today_info(message):
-    track_group(message)
-    today_idx = get_weekday()
-    info = WEEK_INFO.get(today_idx, "Расписание на этот день не найдено")
-    bot.send_message(message.chat.id, info)
-    send_log_to_chat(message, "today", info[:100])  # Отправляем первые 100 символов
+    try:
+        track_group(message)
+        today_idx = get_weekday()
+        info = WEEK_INFO.get(today_idx, "Расписание на этот день не найдено")
+        bot.send_message(message.chat.id, info)
+        send_log_to_chat(message, "today", info[:100])  # Отправляем первые 100 символов
+    except Exception as e:
+        logging.error(f"Ошибка в команде /today: {e}")
+        bot.reply_to(message, "Произошла ошибка при получении расписания")
 
 @bot.message_handler(commands=['что сейчас'])
 def send_current_info(message):
-    track_group(message)
-    now = datetime.now().time()
-    day_idx = get_isoweekday()  # 1–7
+    try:
+        track_group(message)
+        now = datetime.now().time()
+        day_idx = get_isoweekday()  # 1–7
 
-    if day_idx in [6, 7]:  # Суббота или воскресенье
-        response = "Сегодня выходной — занятий нет."
-    else:
-        schedule = SCHEDULE.get(day_idx, [])
-        response = "Сейчас перемена или нет занятий"
+        if day_idx in [6, 7]:  # Суббота или воскресенье
+            response = "Сегодня выходной — занятий нет."
+        else:
+            schedule = SCHEDULE.get(day_idx, [])
+            response = "Сейчас перемена или нет занятий"
 
-        for start, end, text in schedule:
-            if start <= now <= end:
-                response = text
-                break
+            for start, end, text in schedule:
+                if start <= now <= end:
+                    response = text
+                    break
 
-    bot.send_message(message.chat.id, response)
-    send_log_to_chat(message, "что сейчас", response)
+        bot.send_message(message.chat.id, response)
+        send_log_to_chat(message, "что сейчас", response)
+    except Exception as e:
+        logging.error(f"Ошибка в команде 'что сейчас': {e}")
+        bot.reply_to(message, "Произошла ошибка при получении текущего занятия")
 
 # Команды для конкретных дней недели
 @bot.message_handler(commands=['понедельник'])
 def send_monday(message):
-    track_group(message)
-    bot.send_message(message.chat.id, WEEK_INFO[0])
-    send_log_to_chat(message, "понедельник", "Расписание на понедельник")
+    try:
+        track_group(message)
+        bot.send_message(message.chat.id, WEEK_INFO[0])
+        send_log_to_chat(message, "понедельник", "Расписание на понедельник")
+    except Exception as e:
+        logging.error(f"Ошибка в команде /понедельник: {e}")
 
 @bot.message_handler(commands=['вторник'])
 def send_tuesday(message):
-    track_group(message)
-    bot.send_message(message.chat.id, WEEK_INFO[1])
-    send_log_to_chat(message, "вторник", "Расписание на вторник")
+    try:
+        track_group(message)
+        bot.send_message(message.chat.id, WEEK_INFO[1])
+        send_log_to_chat(message, "вторник", "Расписание на вторник")
+    except Exception as e:
+        logging.error(f"Ошибка в команде /вторник: {e}")
 
 @bot.message_handler(commands=['среда'])
 def send_wednesday(message):
-    track_group(message)
-    bot.send_message(message.chat.id, WEEK_INFO[2])
-    send_log_to_chat(message, "среда", "Расписание на среду")
+    try:
+        track_group(message)
+        bot.send_message(message.chat.id, WEEK_INFO[2])
+        send_log_to_chat(message, "среда", "Расписание на среду")
+    except Exception as e:
+        logging.error(f"Ошибка в команде /среда: {e}")
 
 @bot.message_handler(commands=['четверг'])
 def send_thursday(message):
-    track_group(message)
-    bot.send_message(message.chat.id, WEEK_INFO[3])
-    send_log_to_chat(message, "четверг", "Расписание на четверг")
+    try:
+        track_group(message)
+        bot.send_message(message.chat.id, WEEK_INFO[3])
+        send_log_to_chat(message, "четверг", "Расписание на четверг")
+    except Exception as e:
+        logging.error(f"Ошибка в команде /четверг: {e}")
 
 @bot.message_handler(commands=['пятница'])
 def send_friday(message):
-    track_group(message)
-    bot.send_message(message.chat.id, WEEK_INFO[4])
-    send_log_to_chat(message, "пятница", "Расписание на пятницу")
+    try:
+        track_group(message)
+        bot.send_message(message.chat.id, WEEK_INFO[4])
+        send_log_to_chat(message, "пятница", "Расписание на пятницу")
+    except Exception as e:
+        logging.error(f"Ошибка в команде /пятница: {e}")
 
 @bot.message_handler(commands=['суббота'])
 def send_saturday(message):
-    track_group(message)
-    bot.send_message(message.chat.id, WEEK_INFO[5])
-    send_log_to_chat(message, "суббота", "Расписание на субботу")
+    try:
+        track_group(message)
+        bot.send_message(message.chat.id, WEEK_INFO[5])
+        send_log_to_chat(message, "суббота", "Расписание на субботу")
+    except Exception as e:
+        logging.error(f"Ошибка в команде /суббота: {e}")
 
 @bot.message_handler(commands=['воскресенье'])
 def send_sunday(message):
-    track_group(message)
-    bot.send_message(message.chat.id, WEEK_INFO[6])
-    send_log_to_chat(message, "воскресенье", "Расписание на воскресенье")
+    try:
+        track_group(message)
+        bot.send_message(message.chat.id, WEEK_INFO[6])
+        send_log_to_chat(message, "воскресенье", "Расписание на воскресенье")
+    except Exception as e:
+        logging.error(f"Ошибка в команде /воскресенье: {e}")
 
 # Обработка команд /msg и /gmsg
 @bot.message_handler(func=lambda message: message.text.startswith('/msg') or message.text.startswith('/gmsg'))
 def handle_send_message(message):
-    track_group(message)
-    args = message.text.split(maxsplit=2)  # Используем maxsplit=2 чтобы не разбивать текст сообщения
-    
-    if len(args) < 3:
-        bot.reply_to(message, "Используйте: /msg <текст> <id_пользователя> или /gmsg <текст> <id_группы>")
-        send_log_to_chat(message, args[0].lower(), "Недостаточно аргументов")
-        return
-
-    command = args[0].lower()
-    text = args[1]
-    
     try:
-        chat_id = int(args[2])
-    except ValueError:
-        bot.reply_to(message, "ID должен быть числом!")
-        send_log_to_chat(message, command, "Некорректный ID")
-        return
+        track_group(message)
+        args = message.text.split(maxsplit=2)  # Используем maxsplit=2 чтобы не разбивать текст сообщения
+        
+        if len(args) < 3:
+            bot.reply_to(message, "Используйте: /msg <текст> <id_пользователя> или /gmsg <текст> <id_группы>")
+            send_log_to_chat(message, args[0].lower(), "Недостаточно аргументов")
+            return
 
-    try:
-        bot.send_message(chat_id=chat_id, text=text)
-        if command == '/msg':
-            response = f"Сообщение отправлено пользователю {chat_id}"
-        else:
-            response = f"Сообщение отправлено в группу {chat_id}"
-        bot.reply_to(message, response)
-        send_log_to_chat(message, command, response)
-    except telebot.apihelper.ApiTelegramException as e:
-        logging.error(f"Ошибка API при отправке сообщения: {e}")
-        bot.reply_to(message, f"Ошибка при отправке: {e}")
-        send_log_to_chat(message, command, f"Ошибка API: {e}")
+        command = args[0].lower()
+        text = args[1]
+        
+        try:
+            chat_id = int(args[2])
+        except ValueError:
+            bot.reply_to(message, "ID должен быть числом!")
+            send_log_to_chat(message, command, "Некорректный ID")
+            return
+
+        try:
+            bot.send_message(chat_id=chat_id, text=text)
+            if command == '/msg':
+                response = f"Сообщение отправлено пользователю {chat_id}"
+            else:
+                response = f"Сообщение отправлено в группу {chat_id}"
+            bot.reply_to(message, response)
+            send_log_to_chat(message, command, response)
+        except Exception as e:
+            logging.error(f"Ошибка при отправке сообщения: {e}")
+            bot.reply_to(message, f"Ошибка при отправке: {e}")
+            send_log_to_chat(message, command, f"Ошибка: {e}")
     except Exception as e:
-        logging.error(f"Неожиданная ошибка при отправке сообщения: {e}")
-        bot.reply_to(message, f"Неожиданная ошибка: {e}")
-        send_log_to_chat(message, command, f"Неожиданная ошибка: {e}")
+        logging.error(f"Ошибка в обработке команды отправки сообщения: {e}")
+        bot.reply_to(message, "Произошла ошибка при обработке команды")
 
 @bot.message_handler(commands=['groups'])
 def list_all_groups(message):
     """Показывает все группы, где состоит бот"""
-    track_group(message)
     try:
+        track_group(message)
         cursor = conn.execute('SELECT chat_id, title FROM groups')
         groups = cursor.fetchall()
         if groups:
@@ -303,63 +394,64 @@ def list_all_groups(message):
 @bot.message_handler(commands=['members'])
 def get_group_members(message):
     """Получает список участников группы по ID (бот должен быть админом)"""
-    track_group(message)
-    args = message.text.split()
-    if len(args) != 2:
-        bot.reply_to(message, "Используйте: /members <id_группы>")
-        send_log_to_chat(message, "members", "Некорректный формат")
-        return
-
     try:
-        group_id = int(args[1])
-    except ValueError:
-        bot.reply_to(message, "ID группы должен быть числом!")
-        send_log_to_chat(message, "members", "Некорректный ID")
-        return
+        track_group(message)
+        args = message.text.split()
+        if len(args) != 2:
+            bot.reply_to(message, "Используйте: /members <id_группы>")
+            send_log_to_chat(message, "members", "Некорректный формат")
+            return
 
-    try:
-        # Получаем информацию о чате
-        chat = bot.get_chat(group_id)
-        if chat.type not in ['group', 'supergroup']:
-            bot.reply_to(message, "Это не группа!")
-            send_log_to_chat(message, "members", "Указанный ID не является группой")
+        try:
+            group_id = int(args[1])
+        except ValueError:
+            bot.reply_to(message, "ID группы должен быть числом!")
+            send_log_to_chat(message, "members", "Некорректный ID")
             return
+
+        try:
+            # Получаем информацию о чате
+            chat = bot.get_chat(group_id)
+            if chat.type not in ['group', 'supergroup']:
+                bot.reply_to(message, "Это не группа!")
+                send_log_to_chat(message, "members", "Указанный ID не является группой")
+                return
+                
+            # Получаем администраторов (бот должен быть админом)
+            admins = bot.get_chat_administrators(group_id)
             
-        # Получаем администраторов (бот должен быть админом)
-        admins = bot.get_chat_administrators(group_id)
-        
-        # Проверяем, есть ли бот среди админов
-        bot_is_admin = any(admin.user.id == bot.get_me().id for admin in admins)
-        
-        if not bot_is_admin:
-            bot.reply_to(message, "Я не являюсь администратором этой группы!")
-            send_log_to_chat(message, "members", "Бот не является админом группы")
-            return
+            # Проверяем, есть ли бот среди админов
+            bot_is_admin = any(admin.user.id == bot.get_me().id for admin in admins)
             
-        # Получаем количество участников
-        members_count = bot.get_chat_members_count(group_id)
-        
-        msg = f"Группа: {chat.title}\n"
-        msg += f"ID: {group_id}\n"
-        msg += f"Всего участников: {members_count}\n"
-        msg += "\nАдминистраторы:\n"
-        
-        for admin in admins:
-            user = admin.user
-            name = user.full_name
-            username = f"@{user.username}" if user.username else "нет юзернейма"
-            status = "👑 Создатель" if admin.status == 'creator' else "⚡ Админ"
-            msg += f"- {name} ({username}) | {status} | ID: {user.id}\n"
+            if not bot_is_admin:
+                bot.reply_to(message, "Я не являюсь администратором этой группы!")
+                send_log_to_chat(message, "members", "Бот не является админом группы")
+                return
+                
+            # Получаем количество участников
+            members_count = bot.get_chat_members_count(group_id)
             
-        bot.send_message(message.chat.id, msg)
-        send_log_to_chat(message, "members", f"Получено {len(admins)} администраторов из группы {group_id}")
-        
-    except telebot.apihelper.ApiTelegramException as e:
-        if "Forbidden" in str(e) or "Chat not found" in str(e):
-            bot.reply_to(message, "Я не состою в этой группе или не имею доступа!")
-        else:
-            bot.reply_to(message, f"Ошибка: {e}")
-        send_log_to_chat(message, "members", f"Ошибка Telegram API: {e}")
+            msg = f"Группа: {chat.title}\n"
+            msg += f"ID: {group_id}\n"
+            msg += f"Всего участников: {members_count}\n"
+            msg += "\nАдминистраторы:\n"
+            
+            for admin in admins:
+                user = admin.user
+                name = user.full_name
+                username = f"@{user.username}" if user.username else "нет юзернейма"
+                status = "👑 Создатель" if admin.status == 'creator' else "⚡ Админ"
+                msg += f"- {name} ({username}) | {status} | ID: {user.id}\n"
+                
+            bot.send_message(message.chat.id, msg)
+            send_log_to_chat(message, "members", f"Получено {len(admins)} администраторов из группы {group_id}")
+            
+        except Exception as e:
+            if "Forbidden" in str(e) or "Chat not found" in str(e):
+                bot.reply_to(message, "Я не состою в этой группе или не имею доступа!")
+            else:
+                bot.reply_to(message, f"Ошибка: {e}")
+            send_log_to_chat(message, "members", f"Ошибка: {e}")
     except Exception as e:
         logging.error(f"Ошибка при получении участников: {e}")
         bot.send_message(message.chat.id, f"Не удалось получить участников: {e}")
@@ -402,8 +494,52 @@ def send_log_to_chat(message, command, response_text):
 
 # Запуск бота
 if __name__ == '__main__':
-    logging.info("Бот запущен...")
+    logging.info("=" * 50)
+    logging.info("Запуск бота расписания")
+    logging.info(f"Токен: {TOKEN[:10]}...")  # Показываем только начало токена для безопасности
+    logging.info("=" * 50)
+    
+    print("\n" + "=" * 50)
+    print("Запуск бота расписания")
+    print("=" * 50)
+    
     try:
-        bot.infinity_polling(timeout=30, long_polling_timeout=30)
+        # Дополнительная проверка перед запуском
+        bot_info = bot.get_me()
+        print(f"✅ Бот: @{bot_info.username}")
+        print(f"🆔 ID: {bot_info.id}")
+        print(f"📛 Имя: {bot_info.first_name}")
+        if bot_info.last_name:
+            print(f"📛 Фамилия: {bot_info.last_name}")
+        print("\n🔄 Бот запущен и ожидает команд...")
+        print("Для остановки нажмите Ctrl+C")
+        print("=" * 50 + "\n")
+        
+        bot.infinity_polling(timeout=30, long_polling_timeout=30, logger_level=logging.INFO)
+        
+    except telebot.apihelper.ApiTelegramException as e:
+        if "401" in str(e):
+            logging.critical(f"❌ ОШИБКА 401: Неверный токен!")
+            print("\n❌ КРИТИЧЕСКАЯ ОШИБКА!")
+            print("Токен бота неверный или устарел.")
+            print("\nЧтобы исправить:")
+            print("1. Откройте Telegram")
+            print("2. Найдите @BotFather")
+            print("3. Отправьте /mybots")
+            print("4. Выберите своего бота")
+            print("5. Нажмите API Token")
+            print("6. Скопируйте новый токен")
+            print("7. Замените токен в коде на строке 26")
+        else:
+            logging.critical(f"Критическая ошибка Telegram API: {e}")
+            print(f"❌ Критическая ошибка: {e}")
+    except KeyboardInterrupt:
+        logging.info("Бот остановлен пользователем")
+        print("\n🛑 Бот остановлен")
     except Exception as e:
         logging.critical(f"Критическая ошибка при работе бота: {e}")
+        print(f"❌ Критическая ошибка: {e}")
+    finally:
+        conn.close()
+        logging.info("Бот завершил работу")
+        print("Бот завершил работу")
