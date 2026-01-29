@@ -255,7 +255,7 @@ def send_status(message):
     try:
         status_msg = f"✅ Бот работает\n"
         status_msg += f"👤 Имя: @{bot.get_me().username}\n"
-                status_msg += f"🆔 ID: {bot.get_me().id}\n"
+        status_msg += f"🆔 ID: {bot.get_me().id}\n"  # <-- Одинаковый отступ с предыдущими строками
         status_msg += f"📅 Дата: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         bot.reply_to(message, status_msg)
     except Exception as e:
