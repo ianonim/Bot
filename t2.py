@@ -21,13 +21,20 @@ TOKEN = '8058652594:AAEe1D7VYaOxxjlfM56JQ69vXIFFmW51P2c'
 # ID чата, куда отправлять логи (группа/канал)
 LOG_CHAT_ID = -1003601117936  # замените на свой ID
 
+
+# БЕЛЫЙ СПИСОК пользователей (разрешённые ID)
+WHITELIST = [
+    7614638047,   # Пример ID пользователя
+    987654321,   # Добавьте сюда ID тех, кому разрешён доступ
+    # ...
+]
+
 def check_token_validity(token):
     """Проверяет валидность токена"""
     if not token or token.strip() == '':
         return False, "Токен пустой"
     
-    # Проверяем формат токена Telegram Bot API
-    if not token.startswith('') or len(token) < 30:
+    if len(token) < 30:
         return False, "Неверный формат токена"
     
     return True, "Токен имеет правильный формат"
@@ -41,6 +48,7 @@ if not is_valid:
     sys.exit(1)
 
 logging.info("Токен прошел базовую проверку формата")
+
 
 try:
     # Инициализация бота
@@ -88,6 +96,7 @@ WEEK_INFO = {
        "7. География (каб. 39) — 13:25–14:05\n"
        "8. ОБЗР (каб. 39) — 14:15–14:55",
 
+
     2: "Среда:\n"
        "1. Нет занятий — 8:15–8:55\n"
        "2. Обществознание (музей) — 9:00–9:40\n"
@@ -98,6 +107,7 @@ WEEK_INFO = {
        "7. Труд (технология, каб. 2) — 13:25–14:05\n"
        "8. История (музей) — 14:15–14:55",
 
+
     3: "Четверг:\n"
        "1. Физика (каб. 31) — 8:15–8:55\n"
        "2. Биология (каб. 23) — 9:00–9:40\n"
@@ -105,6 +115,7 @@ WEEK_INFO = {
        "4. Русский язык (каб. 24) — 10:45–11:25\n"
        "5. Алгебра (каб. 35) — 11:40–12:20\n"
        "6. «Россия — мои горизонты» — 12:35–13:15",
+
 
     4: "Пятница:\n"
        "1. География (каб. 39) — 8:15–8:55\n"
@@ -114,9 +125,11 @@ WEEK_INFO = {
        "5. Русский язык (библиотека) — 11:40–12:20\n"
        "6. Литература (библиотека) — 12:35–13:15",
 
+
     5: "Суббота: время отдыха! Займитесь хобби или встретьтесь с друзьями.",
     6: "Воскресенье: подготовка к новой неделе! Отдохните и настройтесь на понедельник."
 }
+
 
 # 2. Расписание по интервалам (1=понедельник, ..., 7=воскресенье)
 SCHEDULE = {
@@ -178,6 +191,7 @@ def get_isoweekday() -> int:
     """Возвращает номер дня недели: 1=понедельник, 7=воскресенье."""
     return date.today().isoweekday()
 
+
 # Создание БД для хранения ID групп
 conn = sqlite3.connect('bot_groups.db', check_same_thread=False)
 conn.execute('''CREATE TABLE IF NOT EXISTS groups (
@@ -198,8 +212,18 @@ def track_group(message):
         except Exception as e:
             logging.error(f"Ошибка при сохранении группы: {e}")
 
-@bot.message_handler(commands=['start'])
+def is_authorized(user_id: int) -> bool:
+    """Проверяет, есть ли пользователь в белом списке."""
+    return user_id in WHITELIST
+
+@bot.message_handler(commands=['helper'])
 def send_welcome(message):
+    user_id = message.from_user.id
+    if not is_authorized(user_id):
+        bot.reply_to(message, "❌ Доступ запрещён. Вы не в белом списке.")
+        logging.warning(f"Попытка доступа от неавторизованного пользователя: {user_id}")
+        return
+
     try:
         track_group(message)  # Отслеживаем группу
         bot.reply_to(message, (
@@ -219,13 +243,19 @@ def send_welcome(message):
         logging.error(f"Ошибка в команде /start: {e}")
         bot.reply_to(message, "Произошла ошибка при обработке команды")
 
+
 @bot.message_handler(commands=['status'])
 def send_status(message):
-    """Показывает статус бота"""
+    user_id = message.from_user.id
+    if not is_authorized(user_id):
+        bot.reply_to(message, "❌ Доступ запрещён. Вы не в белом списке.")
+        logging.warning(f"Попытка доступа от неавторизованного пользователя: {user_id}")
+        return
+
     try:
         status_msg = f"✅ Бот работает\n"
-        status_msg += f"👤 Имя: @{bot.get_me().username}\n"
-        status_msg += f"🆔 ID: {bot.get_me().id}\n"
+        status_msg += f"👤 Имя: @{bot.get_me().username}\n
+                status_msg += f"🆔 ID: {bot.get_me().id}\n"
         status_msg += f"📅 Дата: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         bot.reply_to(message, status_msg)
     except Exception as e:
@@ -234,6 +264,12 @@ def send_status(message):
 
 @bot.message_handler(commands=['today'])
 def send_today_info(message):
+    user_id = message.from_user.id
+    if not is_authorized(user_id):
+        bot.reply_to(message, "❌ Доступ запрещён. Вы не в белом списке.")
+        logging.warning(f"Попытка доступа от неавторизованного пользователя: {user_id}")
+        return
+
     try:
         track_group(message)
         today_idx = get_weekday()
@@ -246,6 +282,12 @@ def send_today_info(message):
 
 @bot.message_handler(commands=['что сейчас'])
 def send_current_info(message):
+    user_id = message.from_user.id
+    if not is_authorized(user_id):
+        bot.reply_to(message, "❌ Доступ запрещён. Вы не в белом списке.")
+        logging.warning(f"Попытка доступа от неавторизованного пользователя: {user_id}")
+        return
+
     try:
         track_group(message)
         now = datetime.now().time()
@@ -271,6 +313,12 @@ def send_current_info(message):
 # Команды для конкретных дней недели
 @bot.message_handler(commands=['понедельник'])
 def send_monday(message):
+    user_id = message.from_user.id
+    if not is_authorized(user_id):
+        bot.reply_to(message, "❌ Доступ запрещён. Вы не в белом списке.")
+        logging.warning(f"Попытка доступа от неавторизованного пользователя: {user_id}")
+        return
+
     try:
         track_group(message)
         bot.send_message(message.chat.id, WEEK_INFO[0])
@@ -280,6 +328,12 @@ def send_monday(message):
 
 @bot.message_handler(commands=['вторник'])
 def send_tuesday(message):
+    user_id = message.from_user.id
+    if not is_authorized(user_id):
+        bot.reply_to(message, "❌ Доступ запрещён. Вы не в белом списке.")
+        logging.warning(f"Попытка доступа от неавторизованного пользователя: {user_id}")
+        return
+
     try:
         track_group(message)
         bot.send_message(message.chat.id, WEEK_INFO[1])
@@ -287,8 +341,15 @@ def send_tuesday(message):
     except Exception as e:
         logging.error(f"Ошибка в команде /вторник: {e}")
 
+
 @bot.message_handler(commands=['среда'])
 def send_wednesday(message):
+    user_id = message.from_user.id
+    if not is_authorized(user_id):
+        bot.reply_to(message, "❌ Доступ запрещён. Вы не в белом списке.")
+        logging.warning(f"Попытка доступа от неавторизованного пользователя: {user_id}")
+        return
+
     try:
         track_group(message)
         bot.send_message(message.chat.id, WEEK_INFO[2])
@@ -298,6 +359,12 @@ def send_wednesday(message):
 
 @bot.message_handler(commands=['четверг'])
 def send_thursday(message):
+    user_id = message.from_user.id
+    if not is_authorized(user_id):
+        bot.reply_to(message, "❌ Доступ запрещён. Вы не в белом списке.")
+        logging.warning(f"Попытка доступа от неавторизованного пользователя: {user_id}")
+        return
+
     try:
         track_group(message)
         bot.send_message(message.chat.id, WEEK_INFO[3])
@@ -307,6 +374,12 @@ def send_thursday(message):
 
 @bot.message_handler(commands=['пятница'])
 def send_friday(message):
+    user_id = message.from_user.id
+    if not is_authorized(user_id):
+        bot.reply_to(message, "❌ Доступ запрещён. Вы не в белом списке.")
+        logging.warning(f"Попытка доступа от неавторизованного пользователя: {user_id}")
+        return
+
     try:
         track_group(message)
         bot.send_message(message.chat.id, WEEK_INFO[4])
@@ -316,6 +389,12 @@ def send_friday(message):
 
 @bot.message_handler(commands=['суббота'])
 def send_saturday(message):
+    user_id = message.from_user.id
+    if not is_authorized(user_id):
+        bot.reply_to(message, "❌ Доступ запрещён. Вы не в белом списке.")
+        logging.warning(f"Попытка доступа от неавторизованного пользователя: {user_id}")
+        return
+
     try:
         track_group(message)
         bot.send_message(message.chat.id, WEEK_INFO[5])
@@ -325,6 +404,12 @@ def send_saturday(message):
 
 @bot.message_handler(commands=['воскресенье'])
 def send_sunday(message):
+    user_id = message.from_user.id
+    if not is_authorized(user_id):
+        bot.reply_to(message, "❌ Доступ запрещён. Вы не в белом списке.")
+        logging.warning(f"Попытка доступа от неавторизованного пользователя: {user_id}")
+        return
+
     try:
         track_group(message)
         bot.send_message(message.chat.id, WEEK_INFO[6])
@@ -335,12 +420,19 @@ def send_sunday(message):
 # Обработка команд /msg и /gmsg
 @bot.message_handler(func=lambda message: message.text.startswith('/msg') or message.text.startswith('/gmsg'))
 def handle_send_message(message):
+    user_id = message.from_user.id
+    if not is_authorized(user_id):
+        bot.reply_to(message, "❌ Доступ запрещён. Вы не в белом списке.")
+        logging.warning(f"Попытка доступа от неавторизованного пользователя: {user_id}")
+        return
+
     try:
         track_group(message)
         args = message.text.split(maxsplit=2)  # Используем maxsplit=2 чтобы не разбивать текст сообщения
+
         
         if len(args) < 3:
-            bot.reply_to(message, "Используйте: /msg <текст> <id_пользователя> или /gmsg <текст> <id_группы>")
+bot.reply_to(message, "Используйте: /msg <текст> <id_пользователя> или /gmsg <текст> <id_группы>")
             send_log_to_chat(message, args[0].lower(), "Недостаточно аргументов")
             return
 
@@ -372,7 +464,12 @@ def handle_send_message(message):
 
 @bot.message_handler(commands=['groups'])
 def list_all_groups(message):
-    """Показывает все группы, где состоит бот"""
+    user_id = message.from_user.id
+    if not is_authorized(user_id):
+        bot.reply_to(message, "❌ Доступ запрещён. Вы не в белом списке.")
+        logging.warning(f"Попытка доступа от неавторизованного пользователя: {user_id}")
+        return
+
     try:
         track_group(message)
         cursor = conn.execute('SELECT chat_id, title FROM groups')
@@ -393,7 +490,12 @@ def list_all_groups(message):
 
 @bot.message_handler(commands=['members'])
 def get_group_members(message):
-    """Получает список участников группы по ID (бот должен быть админом)"""
+    user_id = message.from_user.id
+    if not is_authorized(user_id):
+        bot.reply_to(message, "❌ Доступ запрещён. Вы не в белом списке.")
+        logging.warning(f"Попытка доступа от неавторизованного пользователя: {user_id}")
+        return
+
     try:
         track_group(message)
         args = message.text.split()
@@ -499,47 +601,9 @@ if __name__ == '__main__':
     logging.info(f"Токен: {TOKEN[:10]}...")  # Показываем только начало токена для безопасности
     logging.info("=" * 50)
     
-    print("\n" + "=" * 50)
-    print("Запуск бота расписания")
-    print("=" * 50)
-    
+        print("Запуск бота... Ожидание сообщений.")
     try:
-        # Дополнительная проверка перед запуском
-        bot_info = bot.get_me()
-        print(f"✅ Бот: @{bot_info.username}")
-        print(f"🆔 ID: {bot_info.id}")
-        print(f"📛 Имя: {bot_info.first_name}")
-        if bot_info.last_name:
-            print(f"📛 Фамилия: {bot_info.last_name}")
-        print("\n🔄 Бот запущен и ожидает команд...")
-        print("Для остановки нажмите Ctrl+C")
-        print("=" * 50 + "\n")
-        
-        bot.infinity_polling(timeout=30, long_polling_timeout=30, logger_level=logging.INFO)
-        
-    except telebot.apihelper.ApiTelegramException as e:
-        if "401" in str(e):
-            logging.critical(f"❌ ОШИБКА 401: Неверный токен!")
-            print("\n❌ КРИТИЧЕСКАЯ ОШИБКА!")
-            print("Токен бота неверный или устарел.")
-            print("\nЧтобы исправить:")
-            print("1. Откройте Telegram")
-            print("2. Найдите @BotFather")
-            print("3. Отправьте /mybots")
-            print("4. Выберите своего бота")
-            print("5. Нажмите API Token")
-            print("6. Скопируйте новый токен")
-            print("7. Замените токен в коде на строке 26")
-        else:
-            logging.critical(f"Критическая ошибка Telegram API: {e}")
-            print(f"❌ Критическая ошибка: {e}")
-    except KeyboardInterrupt:
-        logging.info("Бот остановлен пользователем")
-        print("\n🛑 Бот остановлен")
+        bot.polling(none_stop=True, interval=0, timeout=20)
     except Exception as e:
-        logging.critical(f"Критическая ошибка при работе бота: {e}")
-        print(f"❌ Критическая ошибка: {e}")
-    finally:
-        conn.close()
-        logging.info("Бот завершил работу")
-        print("Бот завершил работу")
+        logging.error(f"Критическая ошибка при работе бота: {e}")
+        print(f"❌ Бот остановлен из‑за ошибки: {e}")
